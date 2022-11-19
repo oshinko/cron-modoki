@@ -1,5 +1,5 @@
 [package]
-name = "crontab-modoki"
+name = "cron-modoki"
 version = "0.1.0"
 edition = "2021"
 

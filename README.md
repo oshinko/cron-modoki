@@ -1,6 +1,6 @@
-# crontab-modoki
+# cron-modoki
 
-crontab モドキ。
+cron モドキ。
 
 ## 開発
 
