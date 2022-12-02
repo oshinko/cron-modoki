@@ -10,10 +10,34 @@ cat << EOF > .conf
 EOF
 ```
 
-Run
+Run:
 
 ```sh
 cargo run ./.conf
+```
+
+Format:
+
+```sh
+cargo fmt
+```
+
+Checks a package to catch common mistakes and improve your code:
+
+```sh
+cargo clippy
+```
+
+Test:
+
+```sh
+cargo test
+```
+
+Code monitoring and automated testing.
+
+```sh
+cargo make watch
 ```
 
 ## ビルド
