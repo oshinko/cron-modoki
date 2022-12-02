@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, Local, NaiveDate, Timelike, Weekday};
+use chrono::{DateTime, Datelike, Local, Timelike, Weekday};
 use regex::Regex;
 use std::io::BufRead;
 use std::process::Command;
@@ -92,30 +92,24 @@ mod v2 {
             let mut patterns = Vec::new();
 
             for unfixed in field.patterns.iter() {
-                let fixed: TimePattern;
-
-                match unfixed {
-                    UnfixedTimePattern::All(step) => {
-                        fixed = TimePattern::All(*step);
-                    }
+                let fixed = match unfixed {
+                    UnfixedTimePattern::All(step) => TimePattern::All(*step),
 
                     UnfixedTimePattern::Range(start, end, step) => {
                         let mut start2 = Self::str2weeknum(start);
                         let mut end2 = Self::str2weeknum(end);
 
                         if end2 < start2 {
-                            let tmp = start2;
-                            start2 = end2;
-                            end2 = tmp;
+                            std::mem::swap(&mut start2, &mut end2);
                         }
 
-                        fixed = TimePattern::Range(start2, end2, *step);
+                        TimePattern::Range(start2, end2, *step)
                     }
 
                     UnfixedTimePattern::Single(value, step) => {
-                        fixed = TimePattern::Single(Self::str2weeknum(value), *step);
+                        TimePattern::Single(Self::str2weeknum(value), *step)
                     }
-                }
+                };
 
                 patterns.push(fixed);
             }
@@ -127,25 +121,19 @@ mod v2 {
             let mut patterns = Vec::new();
 
             for unfixed in field.patterns.iter() {
-                let fixed: TimePattern;
+                let fixed = match unfixed {
+                    UnfixedTimePattern::All(step) => TimePattern::All(*step),
 
-                match unfixed {
-                    UnfixedTimePattern::All(step) => {
-                        fixed = TimePattern::All(*step);
-                    }
-
-                    UnfixedTimePattern::Range(start, end, step) => {
-                        fixed = TimePattern::Range(
-                            start.parse::<u8>().unwrap(),
-                            end.parse::<u8>().unwrap(),
-                            *step,
-                        );
-                    }
+                    UnfixedTimePattern::Range(start, end, step) => TimePattern::Range(
+                        start.parse::<u8>().unwrap(),
+                        end.parse::<u8>().unwrap(),
+                        *step,
+                    ),
 
                     UnfixedTimePattern::Single(value, step) => {
-                        fixed = TimePattern::Single(value.parse::<u8>().unwrap(), *step);
+                        TimePattern::Single(value.parse::<u8>().unwrap(), *step)
                     }
-                }
+                };
 
                 patterns.push(fixed);
             }
@@ -205,26 +193,26 @@ mod v2 {
 
     #[derive(Debug)]
     struct UnfixedField<'a> {
-        patterns: Vec<UnfixedTimePattern<'a>>
+        patterns: Vec<UnfixedTimePattern<'a>>,
     }
 
     #[derive(Debug, Eq, PartialEq)]
     enum UnfixedTimePattern<'a> {
         All(Option<u8>),
         Range(&'a str, &'a str, Option<u8>),
-        Single(&'a str, Option<u8>)
+        Single(&'a str, Option<u8>),
     }
 
     #[derive(Debug)]
     struct Field {
-        patterns: Vec<TimePattern>
+        patterns: Vec<TimePattern>,
     }
 
     #[derive(Debug, Eq, PartialEq)]
     enum TimePattern {
         All(Option<u8>),
         Range(u8, u8, Option<u8>),
-        Single(u8, Option<u8>)
+        Single(u8, Option<u8>),
     }
 
     impl TimePattern {
@@ -245,7 +233,7 @@ mod v2 {
         assert!(TimePattern::All(None) == TimePattern::All(None));
 
         // 2022-11-27 (Sun) 19:01:00.000
-        let dt = NaiveDate::from_ymd_opt(2022, 11, 27)
+        let dt = chrono::NaiveDate::from_ymd_opt(2022, 11, 27)
             .unwrap()
             .and_hms_milli_opt(19, 1, 00, 00)
             .unwrap()
@@ -431,26 +419,24 @@ fn main() {
         let file = fs::File::open(config_path).expect("Should have been able to read the file");
 
         // Consumes the iterator, returns an (Optional) String
-        for line in io::BufReader::new(file).lines() {
-            if let Ok(expression) = line {
-                println!("Readed line from config: {:?}", expression);
+        for line in io::BufReader::new(file).lines().flatten() {
+            println!("Readed line from config: {:?}", line);
 
-                let (expr, mut iter) = parse_expression(&expression);
+            let (expression, mut iter) = parse_expression(&line);
 
-                println!("Time fields parsed to: {:?}", expr);
+            println!("Time fields parsed to: {:?}", expression);
 
-                let command = iter.next().unwrap();
+            let command = iter.next().unwrap();
 
-                let mut cmd = Command::new(command);
+            let mut cmd = Command::new(command);
 
-                for arg in iter {
-                    cmd.arg(arg);
-                }
-
-                println!("Execute command: {:?}", cmd);
-
-                // cmd.spawn().expect("Failed to spawn child process");
+            for arg in iter {
+                cmd.arg(arg);
             }
+
+            println!("Execute command: {:?}", cmd);
+
+            // cmd.spawn().expect("Failed to spawn child process");
         }
 
         let now = time::SystemTime::now();
