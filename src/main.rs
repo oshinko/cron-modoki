@@ -1,15 +1,15 @@
-use chrono::{DateTime, Datelike, Local, Timelike, Weekday};
+use chrono::{DateTime, Datelike, Duration, Local, SubsecRound, Timelike, Weekday};
 use regex::Regex;
 use std::io::BufRead;
 use std::process::Command;
 use std::str::SplitWhitespace;
-use std::{env, fs, io, thread, time};
+use std::{env, fs, io, thread};
 
 mod v2 {
     use super::*;
 
     #[derive(Debug)]
-    struct Expression {
+    pub struct Expression {
         minutes: Field,
         hours: Field,
         days: Field,
@@ -141,7 +141,7 @@ mod v2 {
             Field { patterns }
         }
 
-        fn parse(text: &str) -> (Self, SplitWhitespace) {
+        pub fn parse(text: &str) -> (Self, SplitWhitespace) {
             let mut iter = text.split_whitespace();
             let minutes = Self::fix(Self::parse_field(iter.next().unwrap()));
             let hours = Self::fix(Self::parse_field(iter.next().unwrap()));
@@ -163,7 +163,7 @@ mod v2 {
             )
         }
 
-        fn test(&self, dt: DateTime<Local>) -> bool {
+        pub fn test(&self, dt: DateTime<Local>) -> bool {
             self.minutes
                 .patterns
                 .iter()
@@ -267,144 +267,6 @@ mod v2 {
     }
 }
 
-#[derive(Debug)]
-struct Expression {
-    minutes: Vec<TimeFieldValue>,
-    hours: Vec<TimeFieldValue>,
-    days: Vec<TimeFieldValue>,
-    months: Vec<TimeFieldValue>,
-    days_of_week: Vec<TimeFieldValue>,
-}
-
-#[derive(Debug, Eq, PartialEq)]
-enum TimeFieldValue {
-    All(Option<u8>),
-    Range(u8, u8, Option<u8>),
-    Single(u8, Option<u8>),
-}
-
-impl TimeFieldValue {
-    fn test(&self, n: u8) -> bool {
-        match self {
-            TimeFieldValue::All(step) => {
-                let i = 0;
-                i % 2 == 0
-            }
-            TimeFieldValue::Range(start, end, step) => *start <= n && n <= *end,
-            TimeFieldValue::Single(value, step) => *value == n,
-        }
-    }
-}
-
-fn parse_expression(expression: &str) -> (Expression, SplitWhitespace) {
-    let mut iter = expression.split_whitespace();
-    let minutes = parse_field_expression(iter.next().unwrap());
-    let hours = parse_field_expression(iter.next().unwrap());
-    let days = parse_field_expression(iter.next().unwrap());
-    let months = parse_field_expression(iter.next().unwrap());
-    let days_of_week = parse_field_expression(iter.next().unwrap());
-    (
-        Expression {
-            minutes,
-            hours,
-            days,
-            months,
-            days_of_week,
-        },
-        iter,
-    )
-}
-
-fn parse_field_expression(field_expression: &str) -> Vec<TimeFieldValue> {
-    let mut r = Vec::new();
-
-    for value_str in field_expression.split(',') {
-        let value: TimeFieldValue;
-
-        let re_all = Regex::new(r"^\*(?:/(\d+))?$").unwrap();
-        let re_range = Regex::new(r"^(\d+)-(\d+)(?:/(\d+))?$").unwrap();
-        let re_single = Regex::new(r"^(\d+)(?:/(\d+))?$").unwrap();
-
-        if let Some(caps) = re_all.captures(value_str) {
-            let step: Option<u8>;
-
-            if let Some(c) = caps.get(1) {
-                step = Some(c.as_str().parse::<u8>().unwrap());
-            } else {
-                step = None;
-            }
-
-            value = TimeFieldValue::All(step);
-        } else if let Some(caps) = re_range.captures(value_str) {
-            let a = caps.get(1).unwrap().as_str().parse::<u8>().unwrap();
-            let b = caps.get(2).unwrap().as_str().parse::<u8>().unwrap();
-            let step: Option<u8>;
-
-            if let Some(c) = caps.get(3) {
-                step = Some(c.as_str().parse::<u8>().unwrap());
-            } else {
-                step = None;
-            }
-
-            value = TimeFieldValue::Range(a, b, step);
-        } else if let Some(caps) = re_single.captures(value_str) {
-            let a = caps.get(1).unwrap().as_str().parse::<u8>().unwrap();
-            let step: Option<u8>;
-
-            if let Some(c) = caps.get(2) {
-                step = Some(c.as_str().parse::<u8>().unwrap());
-            } else {
-                step = None;
-            }
-
-            value = TimeFieldValue::Single(a, step);
-        } else {
-            panic!("invalid field expression: {}", field_expression);
-        }
-
-        r.push(value);
-    }
-
-    r
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_expression() {
-        assert!(TimeFieldValue::Single(0, None) == TimeFieldValue::Single(0, None));
-        assert!(TimeFieldValue::Single(0, None) != TimeFieldValue::Single(1, None));
-
-        assert!(TimeFieldValue::All(None).test(1));
-        assert!(TimeFieldValue::Single(1, None).test(1));
-
-        let expr = parse_expression("1-10/2 *  * * *").0;
-        println!("#### Parsed: {:?}", expr);
-
-        // // ================================================================
-        // // 実験中
-        // // ================================================================
-
-        // let now = Local::now();
-
-        // println!("#### Now: {:?}", now);
-
-        // println!(
-        //     "{} ({}) {} {} {} {} {}",
-        //     now.minute(), expr.minutes.test(now.minute()),
-        //     now.hour(),
-        //     now.day(),
-        //     now.month(),
-        //     now.weekday().number_from_monday(),
-        //     now.weekday().to_string().parse::<Weekday>().unwrap()
-        // );
-
-        // // ================================================================
-    }
-}
-
 fn main() {
     let args: Vec<String> = env::args().collect();
     println!("Command-line arguments: {:?}", args);
@@ -412,9 +274,8 @@ fn main() {
     let config_path = &args[1];
 
     loop {
-        let now = time::SystemTime::now();
-        let m = get_minute(now);
-        println!("Now: {:?} (minute: {})", now, m);
+        let now = Local::now();
+        println!("#### Now: {:?}", now);
 
         let file = fs::File::open(config_path).expect("Should have been able to read the file");
 
@@ -422,9 +283,15 @@ fn main() {
         for line in io::BufReader::new(file).lines().flatten() {
             println!("Readed line from config: {:?}", line);
 
-            let (expression, mut iter) = parse_expression(&line);
+            let (expression, mut iter) = v2::Expression::parse(&line);
 
             println!("Time fields parsed to: {:?}", expression);
+
+            println!("## test: {}", expression.test(now));
+
+            if !expression.test(now) {
+                continue;
+            }
 
             let command = iter.next().unwrap();
 
@@ -436,21 +303,22 @@ fn main() {
 
             println!("Execute command: {:?}", cmd);
 
-            // cmd.spawn().expect("Failed to spawn child process");
+            let output = cmd.output().expect("Failed to spawn child process");
+
+            println!("status: {}", output.status.code().unwrap());
+            println!("stdout: {}", String::from_utf8_lossy(&output.stdout).trim());
+            println!("stderr: {}", String::from_utf8_lossy(&output.stderr).trim());
         }
 
-        let now = time::SystemTime::now();
-        let next_minute = now + time::Duration::from_secs(60);
-        let next_minute_epoch = next_minute.duration_since(time::UNIX_EPOCH).unwrap();
-        let fraction =
-            time::Duration::from_nanos((next_minute_epoch.as_nanos() % (60 * 1000000000)) as u64);
-        let wait_until = next_minute - fraction;
-        let wait_time = wait_until.duration_since(now).unwrap();
+        let now = Local::now();
+        let next_minute = (now + Duration::minutes(1))
+            .trunc_subsecs(0)
+            .with_second(0)
+            .unwrap();
+        let until_next_minute = (next_minute - now).to_std().unwrap();
 
-        thread::sleep(wait_time);
+        println!("Wait {:?}", until_next_minute);
+
+        thread::sleep(until_next_minute);
     }
-}
-
-fn get_minute(t: time::SystemTime) -> u64 {
-    t.duration_since(time::UNIX_EPOCH).unwrap().as_secs() % 3600 / 60
 }
